@@ -4,9 +4,11 @@ const cors = require('cors');
 const multer = require('multer');
 const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const JWT_SECRET = process.env.JWT_SECRET || 'tu-secret-aqui';
 
 // Middleware
 app.use(cors());
@@ -24,15 +26,57 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 } // 50MB
 });
 
+// ===== MIDDLEWARE PARA VALIDAR JWT =====
+const validateJWT = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  
+  if (!authHeader) {
+    return res.status(401).json({ 
+      success: false, 
+      error: 'Token requerido. Usa: Authorization: Bearer <token>' 
+    });
+  }
+
+  const token = authHeader.split(' ')[1];
+  
+  if (!token) {
+    return res.status(401).json({ 
+      success: false, 
+      error: 'Formato inválido. Usa: Authorization: Bearer <token>' 
+    });
+  }
+
+  try {
+    // Verifica el JWT con Supabase directamente
+    const { data, error } = supabase.auth.getUser(token);
+    
+    if (error || !data.user) {
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Token inválido o expirado' 
+      });
+    }
+
+    // Almacena el usuario en el request para usarlo después
+    req.user = data.user;
+    next();
+  } catch (err) {
+    return res.status(403).json({ 
+      success: false, 
+      error: 'Error al validar token: ' + err.message 
+    });
+  }
+};
+
 // ===== RUTAS =====
 
-// 1. Health Check
+// 1. Health Check (sin autenticación)
 app.get('/health', (req, res) => {
   res.json({ status: 'Backend Monitoring OK', timestamp: new Date() });
 });
 
-// 2. Crear un nuevo conglomerado
-app.post('/api/conglomerados', async (req, res) => {
+// 2. Crear un nuevo conglomerado (CON autenticación)
+app.post('/api/conglomerados', validateJWT, async (req, res) => {
   try {
     const { codigo, latitud, longitud, brigada_id } = req.body;
 
@@ -64,8 +108,8 @@ app.post('/api/conglomerados', async (req, res) => {
   }
 });
 
-// 3. Obtener conglomerados
-app.get('/api/conglomerados', async (req, res) => {
+// 3. Obtener conglomerados (CON autenticación)
+app.get('/api/conglomerados', validateJWT, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('conglomerados')
@@ -86,8 +130,8 @@ app.get('/api/conglomerados', async (req, res) => {
   }
 });
 
-// 4. Obtener subparcelas de un conglomerado
-app.get('/api/conglomerados/:id/subparcelas', async (req, res) => {
+// 4. Obtener subparcelas de un conglomerado (CON autenticación)
+app.get('/api/conglomerados/:id/subparcelas', validateJWT, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -111,8 +155,8 @@ app.get('/api/conglomerados/:id/subparcelas', async (req, res) => {
   }
 });
 
-// 5. Guardar detecciones de árboles
-app.post('/api/detecciones', async (req, res) => {
+// 5. Guardar detecciones de árboles (CON autenticación)
+app.post('/api/detecciones', validateJWT, async (req, res) => {
   try {
     const { 
       subparcela_id, 
@@ -138,7 +182,8 @@ app.post('/api/detecciones', async (req, res) => {
           bbox_x,
           bbox_y,
           bbox_width,
-          bbox_height
+          bbox_height,
+          usuario_id: req.user.id // Guarda quién hizo la detección
         }
       ])
       .select();
@@ -158,8 +203,8 @@ app.post('/api/detecciones', async (req, res) => {
   }
 });
 
-// 6. Obtener detecciones de una subparcela
-app.get('/api/subparcelas/:id/detecciones', async (req, res) => {
+// 6. Obtener detecciones de una subparcela (CON autenticación)
+app.get('/api/subparcelas/:id/detecciones', validateJWT, async (req, res) => {
   try {
     const { id } = req.params;
 
