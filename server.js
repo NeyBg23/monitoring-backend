@@ -158,6 +158,4 @@ app.listen(PORT, () => {
   console.log(`🌲 Backend corriendo en puerto ${PORT}`);
 });
 
-// ✅ AGREGAR ESTA LÍNEA:
-module.exports = app;
 
