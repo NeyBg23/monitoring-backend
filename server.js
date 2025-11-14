@@ -13,8 +13,14 @@ const supabase = createClient(
 );
 
 // CORS
-app.use(cors());
-app.use(express.json());
+app.use(cors({
+  origin: ['https://react-vercel-deploy-brown.vercel.app', 'http://localhost:3000', 'http://localhost:5173'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+app.options('*', cors());
 
 // Health check
 app.get('/', (req, res) => {
@@ -147,8 +153,11 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Error interno' });
 });
 
+
 app.listen(PORT, () => {
   console.log(`🌲 Backend corriendo en puerto ${PORT}`);
 });
 
+// ✅ AGREGAR ESTA LÍNEA:
 module.exports = app;
+
