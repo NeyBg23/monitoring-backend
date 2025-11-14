@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const levantamientoRoutes = require('./routes/levantamiento');
+const levantamientoRoutes = require('./src/routes/levantamiento');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
