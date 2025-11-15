@@ -12,7 +12,7 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
-// CORS
+// ✅ CORS CORRECTO - SOLO UNA VEZ
 app.use(cors({
   origin: ['https://react-vercel-deploy-brown.vercel.app', 'http://localhost:3000', 'http://localhost:5173'],
   credentials: true,
@@ -20,13 +20,15 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Middleware para parsear JSON
+// JSON parser
+app.use(express.json());
+
 // Health check
 app.get('/', (req, res) => {
   res.json({ message: 'Levantamiento Backend - OK', status: 'running' });
 });
 
-// ========== ENDPOINTS ==========
+// ========== ENDPOINTS EXISTENTES ==========
 
 // GET conglomerado
 app.get('/api/levantamiento/conglomerado/:id', async (req, res) => {
@@ -146,15 +148,12 @@ app.delete('/api/levantamiento/detecciones-arboles/:id', async (req, res) => {
   }
 });
 
-
 // ========== ENDPOINTS CONTEO AUTOMÁTICO (PASO 7) ==========
 
 // GET resumen de conteo por conglomerado
 app.get('/api/levantamiento/resumen-conglomerado/:conglomeradoId', async (req, res) => {
   try {
     const { conglomeradoId } = req.params;
-    
-    // Obtener todos los árboles del conglomerado
     const { data: arboles, error } = await supabase
       .from('detecciones_arboles')
       .select('*')
@@ -183,7 +182,6 @@ app.get('/api/levantamiento/resumen-conglomerado/:conglomeradoId', async (req, r
       });
     }
 
-    // Cálculos automáticos
     const daps = arboles.map(a => a.dap || 0).filter(d => d > 0);
     const alturas = arboles.map(a => a.altura || 0).filter(h => h > 0);
 
@@ -203,7 +201,6 @@ app.get('/api/levantamiento/resumen-conglomerado/:conglomeradoId', async (req, r
       }
     };
 
-    // Guardar resumen
     const { error: insertError } = await supabase
       .from('resumen_conteos')
       .insert({
@@ -226,12 +223,10 @@ app.get('/api/levantamiento/resumen-conglomerado/:conglomeradoId', async (req, r
   }
 });
 
-
 // GET resumen por subparcela
 app.get('/api/levantamiento/resumen-subparcela/:subparcelaId', async (req, res) => {
   try {
     const { subparcelaId } = req.params;
-    
     const { data: arboles, error } = await supabase
       .from('detecciones_arboles')
       .select('*')
@@ -278,12 +273,10 @@ app.get('/api/levantamiento/resumen-subparcela/:subparcelaId', async (req, res) 
   }
 });
 
-
-// GET validación de datos (Verificar campos faltantes)
+// GET validación de datos
 app.get('/api/levantamiento/validar/:conglomeradoId', async (req, res) => {
   try {
     const { conglomeradoId } = req.params;
-    
     const { data: arboles, error } = await supabase
       .from('detecciones_arboles')
       .select('*')
@@ -314,7 +307,6 @@ app.get('/api/levantamiento/validar/:conglomeradoId', async (req, res) => {
   }
 });
 
-
 // POST guardar resumen manual
 app.post('/api/levantamiento/guardar-resumen', async (req, res) => {
   try {
@@ -344,16 +336,12 @@ app.post('/api/levantamiento/guardar-resumen', async (req, res) => {
   }
 });
 
-
 // Error handler
 app.use((err, req, res, next) => {
   console.error('Error:', err);
   res.status(500).json({ error: 'Error interno' });
 });
 
-
 app.listen(PORT, () => {
   console.log(`🌲 Backend corriendo en puerto ${PORT}`);
 });
-
-
