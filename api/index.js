@@ -82,7 +82,7 @@ app.post('/api/levantamiento/detecciones-arboles', async (req, res) => {
         observaciones: observaciones || '',
         usuario_id,
         brigada_id,
-        timestamp: new Date().toISOString()
+      //  timestamp: new Date().toISOString()
       }])
       .select();
     if (error) return res.status(400).json({ error });
