@@ -191,6 +191,62 @@ app.post('/api/levantamiento/detectar-arboles-satelital', async (req, res) => {
 });
 
 
+
+// ========== POST REGISTRAR ÁRBOL MANUALMENTE ==========
+app.post('/api/levantamiento/registrar-arbol', async (req, res) => {
+  try {
+    const { 
+      subparcela_id, 
+      conglomerado_id, 
+      numero_arbol, 
+      especie, 
+      dap, 
+      altura, 
+      condicion, 
+      observaciones 
+    } = req.body;
+
+    // Validaciones
+    if (!conglomerado_id || !subparcela_id || !numero_arbol || !especie || !dap) {
+      return res.status(400).json({ 
+        error: 'Faltan parámetros requeridos: conglomerado_id, subparcela_id, numero_arbol, especie, dap' 
+      });
+    }
+
+    // Insertar en BD
+    const { data, error } = await supabase
+      .from('detecciones_arboles')
+      .insert([{
+        subparcela_id,
+        conglomerado_id,
+        numero_arbol,
+        especie,
+        dap: parseFloat(dap),
+        altura: altura ? parseFloat(altura) : null,
+        condicion: condicion || 'vivo',
+        observaciones: observaciones || '',
+        categoria: 'Manual',  // Marcar como registrado manualmente
+        confianza: 1.0,
+        fecha_deteccion: new Date().toISOString(),
+        usuario_id: null,
+        brigada_id: null
+      }])
+      .select();
+
+    if (error) throw error;
+
+    res.status(201).json({ 
+      success: true, 
+      data: data[0],
+      mensaje: 'Árbol registrado exitosamente'
+    });
+  } catch (err) {
+    console.error('Error registrando árbol:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 // GET detecciones
 app.get('/api/levantamiento/detecciones/:id', async (req, res) => {
   try {
