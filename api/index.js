@@ -192,7 +192,7 @@ app.post('/api/levantamiento/detectar-arboles-satelital', async (req, res) => {
 
 
 
-// ========== POST REGISTRAR ÁRBOL MANUALMENTE ==========
+// ========== POST REGISTRAR ÁRBOL MANUALMENTE ==========//
 app.post('/api/levantamiento/registrar-arbol', async (req, res) => {
   try {
     const { 
