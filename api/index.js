@@ -38,7 +38,7 @@ app.get('/', (req, res) => {
 
 // ========== ENDPOINTS ==========
 
-// GET conglomerado
+// GET conglomerado CON departamento y municipio
 app.get('/api/levantamiento/conglomerado/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -47,13 +47,42 @@ app.get('/api/levantamiento/conglomerado/:id', async (req, res) => {
       .select('*')
       .eq('id', id)
       .single();
+    
     if (error) return res.status(400).json({ error });
     if (!data) return res.status(404).json({ error: 'No encontrado' });
+    
+    // ✅ Si no tiene departamento/municipio, traer de BRIGADAS
+    if (!data.departamento || !data.municipio) {
+      try {
+        const brigadaResponse = await fetch(
+          `https://brigada-informe-ifn.vercel.app/api/conglomerados/${id}`
+        );
+        if (brigadaResponse.ok) {
+          const brigadaData = await brigadaResponse.json();
+          
+          // Actualizar en BD local
+          await supabase
+            .from('conglomerados')
+            .update({
+              departamento: brigadaData.data?.departamento,
+              municipio: brigadaData.data?.municipio
+            })
+            .eq('id', id);
+          
+          data.departamento = brigadaData.data?.departamento;
+          data.municipio = brigadaData.data?.municipio;
+        }
+      } catch (err) {
+        console.log('No se pudo traer de BRIGADAS');
+      }
+    }
+    
     res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // GET resumen
 app.get('/api/levantamiento/resumen/:id', async (req, res) => {
