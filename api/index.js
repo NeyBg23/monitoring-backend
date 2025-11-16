@@ -5,6 +5,9 @@ const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 
+const { simularDeteccionArboles, calcularAzimutDistancia } = require('./services/sentinelHubService.js');
+
+
 // Supabase
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -327,65 +330,8 @@ app.post('/api/levantamiento/guardar-resumen', async (req, res) => {
   }
 });
 
-// GET coordenadas del conglomerado
-app.get('/api/levantamiento/conglomerado-geo/:conglomeradoId', async (req, res) => {
-  try {
-    const { conglomeradoId } = req.params
 
-    // Llamar API de Brigada-Informe para obtener datos completos
-    const brigadaResponse = await fetch(
-      `https://brigada-informe-ifn.vercel.app/api/conglomerados/${conglomeradoId}`,
-      {
-        headers: { 'Content-Type': 'application/json' }
-      }
-    )
-
-    if (!brigadaResponse.ok) {
-      return res.status(404).json({ error: 'Conglomerado no encontrado' })
-    }
-
-    const conglomeradeData = await brigadaResponse.json()
-
-    // Extraer coordenadas
-    const { 
-      id, 
-      nombre, 
-      ubicacion, 
-      latitud, 
-      longitud, 
-      region, 
-      departamento, 
-      municipio 
-    } = conglomeradeData.data
-
-    res.json({
-      success: true,
-      conglomerado: {
-        id,
-        nombre,
-        ubicacion,
-        coordenadas: {
-          lat: latitud,
-          lon: longitud
-        },
-        ubicacion_geo: {
-          departamento,
-          municipio,
-          region
-        }
-      }
-    })
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-})
-
-import { simularDeteccionArboles, calcularAzimutDistancia } from './services/sentinelHubService.js';
-
-/**
- * POST /api/levantamiento/detectar-arboles-satelital
- * MVP rápido: Simula detección de árboles (Sentinel-2)
- */
+// POST detectar árboles satelital
 app.post('/api/levantamiento/detectar-arboles-satelital', async (req, res) => {
   try {
     const { conglomerado_id, subparcela_id } = req.body;
@@ -394,7 +340,6 @@ app.post('/api/levantamiento/detectar-arboles-satelital', async (req, res) => {
       return res.status(400).json({ error: 'Parámetros faltantes' });
     }
 
-    // 1. Obtener coordenadas
     const brigadaResponse = await fetch(
       `https://brigada-informe-ifn.vercel.app/api/conglomerados/${conglomerado_id}`
     );
@@ -406,12 +351,8 @@ app.post('/api/levantamiento/detectar-arboles-satelital', async (req, res) => {
     const conglomeradeData = await brigadaResponse.json();
     const { latitud, longitud } = conglomeradeData.data.coordenadas;
 
-    console.log(`🛰️ Simulando detección en: ${latitud}, ${longitud}`);
-
-    // 2. Simular detección (para MVP rápido)
     const arbolesDetectados = simularDeteccionArboles(latitud, longitud, 20);
 
-    // 3. Enriquecer con azimut/distancia
     const arbolesEnriquecidos = arbolesDetectados.map((arbol, idx) => {
       const { distancia, azimut } = calcularAzimutDistancia(
         latitud,
@@ -436,7 +377,6 @@ app.post('/api/levantamiento/detectar-arboles-satelital', async (req, res) => {
       };
     });
 
-    // 4. Guardar en BD
     const { data, error } = await supabase
       .from('detecciones_arboles')
       .insert(arbolesEnriquecidos)
@@ -448,13 +388,14 @@ app.post('/api/levantamiento/detectar-arboles-satelital', async (req, res) => {
       success: true,
       total_detectados: arbolesEnriquecidos.length,
       arboles: data,
-      mensaje: `✅ ${arbolesEnriquecidos.length} árboles detectados y guardados`
+      mensaje: `✅ ${arbolesEnriquecidos.length} árboles detectados`
     });
   } catch (err) {
     console.error('Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
+
 
 
 

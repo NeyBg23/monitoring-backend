@@ -1,12 +1,12 @@
 {
-  "type": "module",
+  
   "name": "monitoring-backend",
   "version": "1.0.0",
   "description": "Backend de levantamiento forestal IFN",
-  "main": "server.js",
+  "main": "api/index.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node api/index.js",
+    "dev": "node --watch api/index.js"
   },
   "keywords": [
     "IFN",
