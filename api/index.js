@@ -390,13 +390,17 @@ app.get('/api/levantamiento/resumen-conglomerado/:conglomeradoId', async (req, r
 app.get('/api/levantamiento/resumen-subparcela/:subparcelaId', async (req, res) => {
   try {
     const { subparcelaId } = req.params;
+    
+    console.log('🔍 DEBUG: Buscando árboles para subparcela:', subparcelaId);
+    
     const { data: arboles, error } = await supabase
       .from('detecciones_arboles')
       .select('*')
-      .eq('subparcela_id', subparcelaId)
-      .order('numero_arbol', { ascending: true });
+      .eq('subparcela_id', subparcelaId);
     
     if (error) throw error;
+
+    console.log('📊 DEBUG: Árboles encontrados:', arboles?.length);
 
     if (!arboles || arboles.length === 0) {
       return res.json({ 
@@ -405,36 +409,68 @@ app.get('/api/levantamiento/resumen-subparcela/:subparcelaId', async (req, res) 
           total_arboles: 0,
           arboles_vivos: 0,
           arboles_muertos: 0,
-          diametro_promedio: 0,
+          arboles_enfermos: 0,
+          diametro_promedio: '0',
+          altura_promedio: '0',
           especies_unicas: 0,
           categorias: { brinzales: 0, latizales: 0, fustales: 0, fustales_grandes: 0 }
         }
       });
     }
 
-    const daps = arboles.map(a => a.dap || 0).filter(d => d > 0);
+    // ✅ FILTRAR VALORES VÁLIDOS
+    const alturas = arboles
+      .map(a => {
+        const h = parseFloat(a.altura);
+        return !isNaN(h) && h > 0 ? h : null;
+      })
+      .filter(h => h !== null);
+
+    const daps = arboles
+      .map(a => {
+        const d = parseFloat(a.dap);
+        return !isNaN(d) && d > 0 ? d : null;
+      })
+      .filter(d => d !== null);
+
+    console.log('📏 DEBUG: Alturas válidas:', alturas.length, 'DAPs válidos:', daps.length);
 
     const resumen = {
       total_arboles: arboles.length,
       arboles_vivos: arboles.filter(a => a.condicion === 'vivo').length,
       arboles_muertos: arboles.filter(a => a.condicion === 'muerto').length,
       arboles_enfermos: arboles.filter(a => a.condicion === 'enfermo').length,
-      diametro_promedio: daps.length > 0 ? (daps.reduce((a, b) => a + b) / daps.length).toFixed(2) : 0,
+      // ✅ CALCULAR PROMEDIOS
+      diametro_promedio: daps.length > 0 
+        ? (daps.reduce((a, b) => a + b, 0) / daps.length).toFixed(2) 
+        : '0',
+      altura_promedio: alturas.length > 0 
+        ? (alturas.reduce((a, b) => a + b, 0) / alturas.length).toFixed(2) 
+        : '0',
       especies_unicas: [...new Set(arboles.map(a => a.especie).filter(e => e))].length,
       categorias: {
-        brinzales: arboles.filter(a => a.dap < 5).length,
-        latizales: arboles.filter(a => a.dap >= 5 && a.dap < 10).length,
-        fustales: arboles.filter(a => a.dap >= 10 && a.dap < 50).length,
-        fustales_grandes: arboles.filter(a => a.dap >= 50).length
+        brinzales: arboles.filter(a => parseFloat(a.dap) < 2.5).length,
+        latizales: arboles.filter(a => {
+          const d = parseFloat(a.dap);
+          return d >= 2.5 && d < 10;
+        }).length,
+        fustales: arboles.filter(a => {
+          const d = parseFloat(a.dap);
+          return d >= 10 && d < 50;
+        }).length,
+        fustales_grandes: arboles.filter(a => parseFloat(a.dap) >= 50).length
       }
     };
 
+    console.log('✅ Resumen calculado:', resumen);
+
     res.json({ success: true, resumen, arboles });
   } catch (err) {
-    console.error('Error en resumen subparcela:', err);
+    console.error('❌ Error en resumen subparcela:', err);
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // GET validación de datos
 app.get('/api/levantamiento/validar/:conglomeradoId', async (req, res) => {
