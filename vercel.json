@@ -1,5 +1,5 @@
 {
-  "type": "module",
+  
   "name": "monitoring-backend",
   "version": "1.0.0",
   "description": "Backend de levantamiento de datos IFN",
