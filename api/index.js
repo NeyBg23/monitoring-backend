@@ -157,6 +157,14 @@ app.post('/api/levantamiento/detectar-arboles-satelital', async (req, res) => {
       // ✅ CALCULAR DAP y ALTURA
       const dap = generarDAP(arbol.categoria);
       const altura = generarAltura(dap);
+      const generarAltura = (dap) => {
+        // Relación DAP-Altura simplificada
+        if (dap < 5) return 3 + Math.random() * 4;    // 3-7m
+        if (dap < 15) return 8 + Math.random() * 5;   // 8-13m
+        if (dap < 30) return 14 + Math.random() * 8;  // 14-22m
+        return 23 + Math.random() * 12;                // 23-35m
+      };
+
       
       // ✅ GENERAR CONDICIÓN (vivo/enfermo/muerto)
       const condicion = generarSalud();
@@ -524,14 +532,6 @@ app.post('/api/levantamiento/guardar-resumen', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-
-
-
-
-
-
-
 
 // Error handler
 app.use((err, req, res, next) => {
