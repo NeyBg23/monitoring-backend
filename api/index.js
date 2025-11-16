@@ -349,8 +349,19 @@ app.post('/api/levantamiento/detectar-arboles-satelital', async (req, res) => {
     }
 
     const conglomeradeData = await brigadaResponse.json();
-    const coordenadas = conglomeradeData.data.coordenadas || conglomeradeData.data;
-    const {latitud, longitud} = coordenadas
+    
+    // Extraer lat/lon de cualquier estructura
+    let latitud, longitud;
+    
+    if (conglomeradeData.data.coordenadas) {
+      ({ latitud, longitud } = conglomeradeData.data.coordenadas);
+    } else if (conglomeradeData.data.latitud) {
+      latitud = parseFloat(conglomeradeData.data.latitud);
+      longitud = parseFloat(conglomeradeData.data.longitud);
+    } else {
+      return res.status(400).json({ error: 'No hay coordenadas en respuesta' });
+    }
+
     const arbolesDetectados = simularDeteccionArboles(latitud, longitud, 20);
 
     const arbolesEnriquecidos = arbolesDetectados.map((arbol, idx) => {
