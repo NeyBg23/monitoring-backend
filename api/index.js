@@ -380,6 +380,81 @@ app.get('/api/levantamiento/conglomerado-geo/:conglomeradoId', async (req, res) 
   }
 })
 
+import { simularDeteccionArboles, calcularAzimutDistancia } from './services/sentinelHubService.js';
+
+/**
+ * POST /api/levantamiento/detectar-arboles-satelital
+ * MVP rápido: Simula detección de árboles (Sentinel-2)
+ */
+app.post('/api/levantamiento/detectar-arboles-satelital', async (req, res) => {
+  try {
+    const { conglomerado_id, subparcela_id } = req.body;
+
+    if (!conglomerado_id || !subparcela_id) {
+      return res.status(400).json({ error: 'Parámetros faltantes' });
+    }
+
+    // 1. Obtener coordenadas
+    const brigadaResponse = await fetch(
+      `https://brigada-informe-ifn.vercel.app/api/conglomerados/${conglomerado_id}`
+    );
+
+    if (!brigadaResponse.ok) {
+      return res.status(404).json({ error: 'Conglomerado no encontrado' });
+    }
+
+    const conglomeradeData = await brigadaResponse.json();
+    const { latitud, longitud } = conglomeradeData.data.coordenadas;
+
+    console.log(`🛰️ Simulando detección en: ${latitud}, ${longitud}`);
+
+    // 2. Simular detección (para MVP rápido)
+    const arbolesDetectados = simularDeteccionArboles(latitud, longitud, 20);
+
+    // 3. Enriquecer con azimut/distancia
+    const arbolesEnriquecidos = arbolesDetectados.map((arbol, idx) => {
+      const { distancia, azimut } = calcularAzimutDistancia(
+        latitud,
+        longitud,
+        arbol.latitud,
+        arbol.longitud
+      );
+
+      return {
+        subparcela_id,
+        conglomerado_id,
+        numero_arbol: idx + 1,
+        especie: 'Detectado (satelital)',
+        dap: null,
+        altura: null,
+        categoria: arbol.categoria,
+        azimut,
+        distancia,
+        confianza: arbol.confianza,
+        condicion: 'vivo',
+        observaciones: `Auto-detectado - NDVI: ${arbol.ndvi.toFixed(2)}`
+      };
+    });
+
+    // 4. Guardar en BD
+    const { data, error } = await supabase
+      .from('detecciones_arboles')
+      .insert(arbolesEnriquecidos)
+      .select();
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      total_detectados: arbolesEnriquecidos.length,
+      arboles: data,
+      mensaje: `✅ ${arbolesEnriquecidos.length} árboles detectados y guardados`
+    });
+  } catch (err) {
+    console.error('Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 
 
