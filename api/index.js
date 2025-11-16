@@ -192,7 +192,7 @@ app.post('/api/levantamiento/detectar-arboles-satelital', async (req, res) => {
 
 
 
-// ========== POST REGISTRAR ÁRBOL MANUALMENTE ==========//
+// ========== POST REGISTRAR ÁRBOL MANUALMENTE ==========
 app.post('/api/levantamiento/registrar-arbol', async (req, res) => {
   try {
     const { 
@@ -213,19 +213,32 @@ app.post('/api/levantamiento/registrar-arbol', async (req, res) => {
       });
     }
 
+    // ✅ Calcular categoría según DAP (Manual IFN)
+    let categoria;
+    const dapNum = parseFloat(dap);
+    if (dapNum < 2.5) {
+      categoria = 'B';  // Brinzal
+    } else if (dapNum >= 2.5 && dapNum < 10) {
+      categoria = 'L';  // Latizal
+    } else if (dapNum >= 10 && dapNum < 50) {
+      categoria = 'F';  // Fustal
+    } else {
+      categoria = 'FG'; // Fustal Grande
+    }
+
     // Insertar en BD
     const { data, error } = await supabase
       .from('detecciones_arboles')
       .insert([{
         subparcela_id,
         conglomerado_id,
-        numero_arbol,
+        numero_arbol: parseInt(numero_arbol),
         especie,
         dap: parseFloat(dap),
         altura: altura ? parseFloat(altura) : null,
         condicion: condicion || 'vivo',
+        categoria: categoria,  // ✅ AHORA VÁLIDO
         observaciones: observaciones || '',
-        categoria: 'Manual',  // Marcar como registrado manualmente
         confianza: 1.0,
         fecha_deteccion: new Date().toISOString(),
         usuario_id: null,
@@ -245,6 +258,7 @@ app.post('/api/levantamiento/registrar-arbol', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 
 // GET detecciones
