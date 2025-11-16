@@ -340,27 +340,20 @@ app.post('/api/levantamiento/detectar-arboles-satelital', async (req, res) => {
       return res.status(400).json({ error: 'Parámetros faltantes' });
     }
 
-    const brigadaResponse = await fetch(
-      `https://brigada-informe-ifn.vercel.app/api/conglomerados/${conglomerado_id}`
-    );
+    // ✅ BUSCAR EN BD LOCAL (monitoring-backend)
+    const { data: conglomerado, error: dbError } = await supabase
+      .from('conglomerados')
+      .select('*')
+      .eq('id', conglomerado_id)
+      .single();
 
-    if (!brigadaResponse.ok) {
+    if (dbError || !conglomerado) {
       return res.status(404).json({ error: 'Conglomerado no encontrado' });
     }
 
-    const conglomeradeData = await brigadaResponse.json();
-    
-    // Extraer lat/lon de cualquier estructura
-    let latitud, longitud;
-    
-    if (conglomeradeData.data.coordenadas) {
-      ({ latitud, longitud } = conglomeradeData.data.coordenadas);
-    } else if (conglomeradeData.data.latitud) {
-      latitud = parseFloat(conglomeradeData.data.latitud);
-      longitud = parseFloat(conglomeradeData.data.longitud);
-    } else {
-      return res.status(400).json({ error: 'No hay coordenadas en respuesta' });
-    }
+    let latitud = parseFloat(conglomerado.latitud);
+    let longitud = parseFloat(conglomerado.longitud);
+
 
     const arbolesDetectados = simularDeteccionArboles(latitud, longitud, 20);
 
