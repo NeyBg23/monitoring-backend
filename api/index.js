@@ -5,7 +5,14 @@ const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 
-const { simularDeteccionArboles, calcularAzimutDistancia } = require('./services/sentinelHubService.js');
+const { 
+  simularDeteccionArboles, 
+  calcularAzimutDistancia,
+  generarDAP,
+  generarAltura,
+  generarSalud
+} = require('./services/sentinelHubService.js');
+
 
 
 // Supabase
@@ -65,35 +72,124 @@ app.get('/api/levantamiento/resumen/:id', async (req, res) => {
   }
 });
 
-// POST árbol
-app.post('/api/levantamiento/detecciones-arboles', async (req, res) => {
+// POST detectar árboles satelital
+app.post('/api/levantamiento/detectar-arboles-satelital', async (req, res) => {
   try {
-    const { subparcela_id, conglomerado_id, numero_arbol, especie, dap, altura, condicion, observaciones, usuario_id, brigada_id } = req.body;
-    if (!subparcela_id || !conglomerado_id || !numero_arbol || !especie || !dap) {
-      return res.status(400).json({ error: 'Campos faltantes' });
+    const { conglomerado_id, subparcela_id } = req.body;
+    
+    if (!conglomerado_id || !subparcela_id) {
+      return res.status(400).json({ error: 'Parámetros faltantes: conglomerado_id, subparcela_id' });
     }
+    
+    // BUSCAR EN BD LOCAL (monitoring-backend)
+    // Obtener conglomerado
+    const { data: conglomerado, error: dbError } = await supabase
+      .from('conglomerados')
+      .select('*')
+      .eq('id', conglomerado_id)
+      .single();
+    
+    if (dbError || !conglomerado) {
+      return res.status(404).json({ error: 'Conglomerado no encontrado' });
+    }
+    
+    // TRAER DATOS GEO-ADMINISTRATIVOS DE brigada-informe
+    let departamento = 'N/A';
+    let municipio = 'N/A';
+    
+    try {
+      const brigadaResponse = await fetch(
+        `https://brigada-informe-ifn.vercel.app/api/conglomerados/${conglomerado_id}`
+      );
+      if (brigadaResponse.ok) {
+        const brigadaData = await brigadaResponse.json();
+        departamento = brigadaData.data?.departamento || 'N/A';
+        municipio = brigadaData.data?.municipio || 'N/A';
+        
+        // GUARDAR EN BD LOCAL
+        await supabase
+          .from('conglomerados')
+          .update({ departamento, municipio })
+          .eq('id', conglomerado_id);
+      }
+    } catch (err) {
+      console.log('Advertencia: No se pudieron traer datos geo-administrativos');
+    }
+    
+    // EXTRAER COORDENADAS
+    let latitud = parseFloat(conglomerado.latitud);
+    let longitud = parseFloat(conglomerado.longitud);
+    
+    // SIMULAR DETECCIÓN DE ÁRBOLES
+    const arbolesDetectados = simularDeteccionArboles(latitud, longitud, 20);
+    
+    // ENRIQUECER CON DATOS CALCULADOS
+    const arbolesEnriquecidos = arbolesDetectados.map((arbol, idx) => {
+      // ✅ CALCULAR DAP y ALTURA
+      const dap = generarDAP(arbol.categoria);
+      const altura = generarAltura(dap);
+      
+      // ✅ GENERAR CONDICIÓN (vivo/enfermo/muerto)
+      const condicion = generarSalud();
+      
+      // Calcular azimut y distancia
+      const { distancia, azimut } = calcularAzimutDistancia(
+        latitud, 
+        longitud, 
+        arbol.latitud, 
+        arbol.longitud
+      );
+      
+      return {
+        subparcela_id: subparcela_id,
+        conglomerado_id: conglomerado_id,
+        numero_arbol: idx + 1,
+        especie: 'Detectado satelital',
+        dap: dap,                    // ✅ AHORA CON VALOR
+        altura: altura,              // ✅ AHORA CON VALOR
+        categoria: arbol.categoria,
+        azimut: azimut,
+        distancia: distancia,
+        confianza: arbol.confianza,
+        condicion: condicion,        // ✅ AHORA CON VALOR VARIABLE
+        observaciones: `Auto-detectado NDVI=${arbol.ndvi.toFixed(2)},Conf=${(arbol.confianza*100).toFixed(0)}%,Cond=${condicion}`,
+        usuario_id: null,            // Opcional, puede venir del JWT después
+        brigada_id: null,            // Opcional, puede venir del JWT después
+        fecha_deteccion: new Date().toISOString()
+      };
+    });
+    
+    // GUARDAR EN BD
     const { data, error } = await supabase
       .from('detecciones_arboles')
-      .insert([{
-        subparcela_id,
-        conglomerado_id,
-        numero_arbol: parseInt(numero_arbol),
-        especie,
-        dap: parseFloat(dap),
-        altura: altura ? parseFloat(altura) : null,
-        condicion: condicion || 'vivo',
-        observaciones: observaciones || '',
-        usuario_id,
-        brigada_id,
-      //  timestamp: new Date().toISOString()
-      }])
+      .insert(arbolesEnriquecidos)
       .select();
-    if (error) return res.status(400).json({ error });
-    res.status(201).json({ success: true, data: data[0] });
+    
+    if (error) {
+      throw error;
+    }
+    
+    res.json({
+      success: true,
+      total_detectados: arbolesEnriquecidos.length,
+      arboles: data,
+      mensaje: `${arbolesEnriquecidos.length} árboles detectados automáticamente`,
+      conglomerado_codigo: conglomerado.codigo,
+      estadisticas: {
+        dap_promedio: (data.reduce((a, b) => a + (b.dap || 0), 0) / data.length).toFixed(2),
+        altura_promedio: (data.reduce((a, b) => a + (b.altura || 0), 0) / data.length).toFixed(2),
+        vivos: data.filter(a => a.condicion === 'vivo').length,
+        enfermos: data.filter(a => a.condicion === 'enfermo').length,
+        muertos: data.filter(a => a.condicion === 'muerto').length
+      }
+    });
+    
   } catch (err) {
+    console.error('Error detección:', err);
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // GET detecciones
 app.get('/api/levantamiento/detecciones/:id', async (req, res) => {
@@ -331,98 +427,7 @@ app.post('/api/levantamiento/guardar-resumen', async (req, res) => {
 });
 
 
-// POST detectar árboles satelital
-app.post('/api/levantamiento/detectar-arboles-satelital', async (req, res) => {
-  try {
-    const { conglomerado_id, subparcela_id } = req.body;
 
-    if (!conglomerado_id || !subparcela_id) {
-      return res.status(400).json({ error: 'Parámetros faltantes' });
-    }
-
-    // ✅ BUSCAR EN BD LOCAL (monitoring-backend)
-    // Obtener conglomerado LOCAL + datos de brigada-informe
-    const { data: conglomerado, error: dbError } = await supabase
-      .from('conglomerados')
-      .select('*')
-      .eq('id', conglomerado_id)
-      .single();
-
-    if (dbError || !conglomerado) {
-      return res.status(404).json({ error: 'Conglomerado no encontrado' });
-    }
-
-    // ✅ TRAER DATOS GEO-ADMINISTRATIVOS DE brigada-informe
-    let departamento = 'N/A', municipio = 'N/A';
-    try {
-      const brigadaResponse = await fetch(
-        `https://brigada-informe-ifn.vercel.app/api/conglomerados/${conglomerado_id}`
-      );
-      if (brigadaResponse.ok) {
-        const brigadaData = await brigadaResponse.json();
-        departamento = brigadaData.data.departamento || 'N/A';
-        municipio = brigadaData.data.municipio || 'N/A';
-        
-        // ✅ GUARDAR EN BD LOCAL
-        await supabase
-          .from('conglomerados')
-          .update({ departamento, municipio })
-          .eq('id', conglomerado_id);
-      }
-    } catch (err) {
-      console.log('Advertencia: No se pudieron traer datos geo-administrativos');
-    }
-
-
-    let latitud = parseFloat(conglomerado.latitud);
-    let longitud = parseFloat(conglomerado.longitud);
-
-
-
-    const arbolesDetectados = simularDeteccionArboles(latitud, longitud, 20);
-
-    const arbolesEnriquecidos = arbolesDetectados.map((arbol, idx) => {
-      const { distancia, azimut } = calcularAzimutDistancia(
-        latitud,
-        longitud,
-        arbol.latitud,
-        arbol.longitud
-      );
-
-      return {
-        subparcela_id,
-        conglomerado_id,
-        numero_arbol: idx + 1,
-        especie: 'Detectado (satelital)',
-        dap: null,
-        altura: null,
-        categoria: arbol.categoria,
-        azimut,
-        distancia,
-        confianza: arbol.confianza,
-        condicion: 'vivo',
-        observaciones: `Auto-detectado - NDVI: ${arbol.ndvi.toFixed(2)}`
-      };
-    });
-
-    const { data, error } = await supabase
-      .from('detecciones_arboles')
-      .insert(arbolesEnriquecidos)
-      .select();
-
-    if (error) throw error;
-
-    res.json({
-      success: true,
-      total_detectados: arbolesEnriquecidos.length,
-      arboles: data,
-      mensaje: `✅ ${arbolesEnriquecidos.length} árboles detectados`
-    });
-  } catch (err) {
-    console.error('Error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
 
 
 
@@ -433,6 +438,11 @@ app.post('/api/levantamiento/detectar-arboles-satelital', async (req, res) => {
 app.use((err, req, res, next) => {
   console.error('Error:', err);
   res.status(500).json({ error: 'Error interno' });
+});
+// ✅ ESCUCHAR EN PUERTO
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`✅ Backend corriendo en puerto ${PORT}`);
 });
 
 module.exports = app;
