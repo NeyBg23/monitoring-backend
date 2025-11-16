@@ -327,6 +327,64 @@ app.post('/api/levantamiento/guardar-resumen', async (req, res) => {
   }
 });
 
+// GET coordenadas del conglomerado
+app.get('/api/levantamiento/conglomerado-geo/:conglomeradoId', async (req, res) => {
+  try {
+    const { conglomeradoId } = req.params
+
+    // Llamar API de Brigada-Informe para obtener datos completos
+    const brigadaResponse = await fetch(
+      `https://brigada-informe-ifn.vercel.app/api/conglomerados/${conglomeradoId}`,
+      {
+        headers: { 'Content-Type': 'application/json' }
+      }
+    )
+
+    if (!brigadaResponse.ok) {
+      return res.status(404).json({ error: 'Conglomerado no encontrado' })
+    }
+
+    const conglomeradeData = await brigadaResponse.json()
+
+    // Extraer coordenadas
+    const { 
+      id, 
+      nombre, 
+      ubicacion, 
+      latitud, 
+      longitud, 
+      region, 
+      departamento, 
+      municipio 
+    } = conglomeradeData.data
+
+    res.json({
+      success: true,
+      conglomerado: {
+        id,
+        nombre,
+        ubicacion,
+        coordenadas: {
+          lat: latitud,
+          lon: longitud
+        },
+        ubicacion_geo: {
+          departamento,
+          municipio,
+          region
+        }
+      }
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+
+
+
+
+
 // Error handler
 app.use((err, req, res, next) => {
   console.error('Error:', err);
