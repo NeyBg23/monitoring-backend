@@ -341,6 +341,7 @@ app.post('/api/levantamiento/detectar-arboles-satelital', async (req, res) => {
     }
 
     // ✅ BUSCAR EN BD LOCAL (monitoring-backend)
+    // Obtener conglomerado LOCAL + datos de brigada-informe
     const { data: conglomerado, error: dbError } = await supabase
       .from('conglomerados')
       .select('*')
@@ -351,8 +352,31 @@ app.post('/api/levantamiento/detectar-arboles-satelital', async (req, res) => {
       return res.status(404).json({ error: 'Conglomerado no encontrado' });
     }
 
+    // ✅ TRAER DATOS GEO-ADMINISTRATIVOS DE brigada-informe
+    let departamento = 'N/A', municipio = 'N/A';
+    try {
+      const brigadaResponse = await fetch(
+        `https://brigada-informe-ifn.vercel.app/api/conglomerados/${conglomerado_id}`
+      );
+      if (brigadaResponse.ok) {
+        const brigadaData = await brigadaResponse.json();
+        departamento = brigadaData.data.departamento || 'N/A';
+        municipio = brigadaData.data.municipio || 'N/A';
+        
+        // ✅ GUARDAR EN BD LOCAL
+        await supabase
+          .from('conglomerados')
+          .update({ departamento, municipio })
+          .eq('id', conglomerado_id);
+      }
+    } catch (err) {
+      console.log('Advertencia: No se pudieron traer datos geo-administrativos');
+    }
+
+
     let latitud = parseFloat(conglomerado.latitud);
     let longitud = parseFloat(conglomerado.longitud);
+
 
 
     const arbolesDetectados = simularDeteccionArboles(latitud, longitud, 20);
