@@ -349,8 +349,8 @@ app.post('/api/levantamiento/detectar-arboles-satelital', async (req, res) => {
     }
 
     const conglomeradeData = await brigadaResponse.json();
-    const { latitud, longitud } = conglomeradeData.data.coordenadas;
-
+    const coordenadas = conglomeradeData.data.coordenadas || conglomeradeData.data;
+    const {latitud, longitud} = coordenadas
     const arbolesDetectados = simularDeteccionArboles(latitud, longitud, 20);
 
     const arbolesEnriquecidos = arbolesDetectados.map((arbol, idx) => {
